@@ -26,7 +26,7 @@ st.markdown(
 )
 
 # ------------------------------------------------------------------
-# Geração dos dados sintéticos (em cache para performance)
+# Geração dos dados sintéticos
 # ------------------------------------------------------------------
 @st.cache_data
 def gerar_dados():
@@ -42,8 +42,6 @@ def gerar_dados():
         random_state=42,
     )
 
-    # Escalar para faixas realistas
-    # Peso (g) ~ 200g a 1200g | Espessura (mm) ~ 5 a 35
     peso = 200 + (X[:, 0] - X[:, 0].min()) / (X[:, 0].max() - X[:, 0].min()) * 1000
     espessura = 5 + (X[:, 1] - X[:, 1].min()) / (X[:, 1].max() - X[:, 1].min()) * 30
 
@@ -53,7 +51,6 @@ def gerar_dados():
         "Classe": y,
     })
 
-    # Reordenar classes: 0=Aprovada, 1=Retrabalho, 2=Refugo
     mapa = {0: "Aprovada", 1: "Retrabalho", 2: "Refugo"}
     df["Classe"] = df["Classe"].map(mapa)
     return df
@@ -62,12 +59,13 @@ def gerar_dados():
 df = gerar_dados()
 
 # ------------------------------------------------------------------
-# Treinamento do modelo SVM
+# Treinamento do modelo SVM — CORRIGIDO
 # ------------------------------------------------------------------
 @st.cache_resource
 def treinar_modelo(df):
-    X = df[["Peso_gramas", "Espessura_mm"]].values
-    y = df["Classe"].values
+    # 🔑 Conversão explícita para NumPy resolve o bug de ArrowExtensionArray
+    X = np.asarray(df[["Peso_gramas", "Espessura_mm"]].values, dtype=float)
+    y = np.asarray(df["Classe"].values, dtype=object)
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.3, random_state=42, stratify=y
@@ -81,7 +79,9 @@ def treinar_modelo(df):
     modelo.fit(X_train_s, y_train)
 
     y_pred = modelo.predict(X_test_s)
-    cm = confusion_matrix(y_test, y_pred, labels=["Aprovada", "Retrabalho", "Refugo"])
+    cm = confusion_matrix(
+        y_test, y_pred, labels=["Aprovada", "Retrabalho", "Refugo"]
+    )
     acc = accuracy_score(y_test, y_pred)
 
     return modelo, scaler, cm, acc
@@ -116,16 +116,16 @@ with col2:
 # Botão de avaliação
 # ------------------------------------------------------------------
 if st.button("✅ Avaliar Peça", use_container_width=True):
-    entrada = np.array([[peso, espessura]])
+    entrada = np.array([[peso, espessura]], dtype=float)
     entrada_s = scaler.transform(entrada)
     predicao = modelo.predict(entrada_s)[0]
 
     if predicao == "Aprovada":
-        st.success(f"🟢 **APROVADA** — Peça dentro das especificações.")
+        st.success("🟢 **APROVADA** — Peça dentro das especificações.")
     elif predicao == "Retrabalho":
-        st.warning(f"🟡 **RETRABALHO** — Peça necessita de ajuste.")
+        st.warning("🟡 **RETRABALHO** — Peça necessita de ajuste.")
     else:
-        st.error(f"🔴 **REFUGO** — Peça fora das especificações, descarte.")
+        st.error("🔴 **REFUGO** — Peça fora das especificações, descarte.")
 
 # ------------------------------------------------------------------
 # Matriz de confusão
